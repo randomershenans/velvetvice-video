@@ -1,0 +1,11 @@
+node_modules
+.DS_Store
+*.tsbuildinfo
+
+# Per-clip working files — not repo content
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+public/*
+!public/.gitkeep
