@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "render": "node render.mjs",
+    "pipeline": "node pipeline.mjs",
     "studio": "remotion studio src/index.ts"
   },
   "dependencies": {
@@ -12,6 +13,7 @@
     "@remotion/cli": "^4.0.462",
     "@remotion/google-fonts": "^4.0.462",
     "@remotion/renderer": "^4.0.462",
+    "googleapis": "^171.4.0",
     "music-metadata": "^11.12.3",
     "react": "19.0.0",
     "react-dom": "19.0.0",
