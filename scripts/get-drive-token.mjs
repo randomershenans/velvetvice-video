@@ -18,7 +18,8 @@ import { exec } from 'node:child_process';
  * Paste the printed token into GitHub Actions as GOOGLE_REFRESH_TOKEN.
  */
 
-const PORT = 3000;
+// Override with OAUTH_PORT if 8888 is also in use locally.
+const PORT = Number(process.env.OAUTH_PORT ?? 8888);
 const REDIRECT_URI = `http://localhost:${PORT}/oauth/callback`;
 const SCOPES = ['https://www.googleapis.com/auth/drive'];
 
