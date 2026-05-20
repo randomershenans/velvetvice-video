@@ -29,6 +29,11 @@ jobs:
 
       - run: npm ci
 
+      - name: Install ffmpeg
+        # Used by pipeline.mjs to time-stretch the TTS audio (atempo filter).
+        # Not on ubuntu-latest by default since 2024.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Generate, render, and post clip
         env:
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
