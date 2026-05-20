@@ -77,7 +77,7 @@ async function makeClip(i) {
       '=== METADATA ===',
       `Vibe:   ${vibe}`,
       `Heat:   ${heat}`,
-      `Voice:  ${voice}`,
+      `Voice:  ${voice.id} (${voice.gender})`,
       `Length: ${seconds.toFixed(1)}s`,
       '',
     ].join('\n'),
