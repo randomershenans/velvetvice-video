@@ -3,7 +3,6 @@ name: Daily Velvet clips
 on:
   schedule:
     # Five runs a day spaced across EU/US prime social hours (UTC).
-    # GitHub Actions schedules are best-effort — actual fire time can drift.
     - cron: '0 8 * * *'
     - cron: '0 12 * * *'
     - cron: '0 16 * * *'
@@ -33,7 +32,9 @@ jobs:
       - name: Generate, render, and post clip
         env:
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
-          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           META_IG_BUSINESS_ID: ${{ secrets.META_IG_BUSINESS_ID }}
