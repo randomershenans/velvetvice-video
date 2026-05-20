@@ -2,32 +2,25 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { generateStory, generateAudio } from './lib/xai.mjs';
 import { renderClip } from './lib/render.mjs';
-import { uploadToDrive, driveConfigured } from './lib/drive.mjs';
-import { uploadMedia, schedulePost, ayrshareConfigured } from './lib/ayrshare.mjs';
+import { uploadAndShare, driveConfigured } from './lib/drive.mjs';
+import { postReel, metaConfigured } from './lib/meta.mjs';
+import { postVideo, tiktokConfigured } from './lib/tiktok.mjs';
 import { pickVibe, pickVoice } from './vibes.mjs';
 
 /**
- * The hands-off pipeline: per clip, invent a vibe + voice, ask Grok for the
- * full story package (title, subtitle, body, social caption), narrate it,
- * render a vertical clip (book cover → page turn → narrated page →
- * branded CTA), capture a cover-still thumbnail, archive to Drive
- * (optional), upload the video to Ayrshare's media bucket, and schedule a
- * post on Instagram + TikTok at a staggered time.
+ * The hands-off pipeline: invent a vibe + voice, ask Grok for the full story
+ * package (title, subtitle, body, social caption), narrate it, render a
+ * vertical clip (book cover → page turn → narrated page → branded CTA),
+ * capture a cover-still thumbnail, upload the video to Drive (publicly
+ * readable), then post to Instagram Reels and TikTok via their native APIs
+ * using the Drive URL.
  *
- * Designed to run once a day via .github/workflows/clips.yml — five clips
- * per run, posts staggered through the day. A failed clip is logged and
- * skipped so the rest of the batch still ships.
+ * Designed to run 5x/day via .github/workflows/clips.yml — one clip per run,
+ * posted immediately. A failed clip is logged and skipped; one platform
+ * failing doesn't take down the other.
  */
 
-const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 5));
-const POST_START_HOURS = Number(process.env.POST_START_HOURS ?? 1);
-const POST_INTERVAL_HOURS = Number(process.env.POST_INTERVAL_HOURS ?? 3);
-
-/** ISO timestamp for the i-th clip's post (1-indexed). Spaced from now. */
-function scheduleTimeFor(i) {
-  const offsetMs = (POST_START_HOURS + (i - 1) * POST_INTERVAL_HOURS) * 60 * 60 * 1000;
-  return new Date(Date.now() + offsetMs).toISOString();
-}
+const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
 
 async function makeClip(i) {
   const { vibe, heat } = pickVibe();
@@ -44,7 +37,7 @@ async function makeClip(i) {
   if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const label = `velvetvice-${stamp}-${i}`;
+  const label = `velvet-${stamp}-${i}`;
   const audioPath = path.join(tmpDir, `${label}.mp3`);
   writeFileSync(audioPath, audio);
 
@@ -67,29 +60,40 @@ async function makeClip(i) {
     `Title: ${story.title}\nSubtitle: ${story.subtitle}\nVibe: ${vibe}\nHeat: ${heat}\nVoice: ${voice}\n\n--- Body ---\n${story.body}\n\n--- Caption ---\n${story.caption}\n`,
   );
 
-  // Optional Drive archive — non-fatal if it fails.
-  if (driveConfigured()) {
-    try {
-      await uploadToDrive(videoPath, 'video/mp4');
-      await uploadToDrive(thumbnailPath, 'image/png');
-      console.log(`[${i}] archived to Drive`);
-    } catch (e) {
-      console.warn(`[${i}] Drive archive failed (non-fatal): ${e?.message ?? e}`);
-    }
+  if (!driveConfigured()) {
+    console.log(`[${i}] Drive not configured — can't host the video, skipping social posts`);
+    return;
   }
 
-  if (ayrshareConfigured()) {
-    const mediaUrl = await uploadMedia(videoPath);
-    const scheduleDate = scheduleTimeFor(i);
-    await schedulePost({ caption: story.caption, videoUrl: mediaUrl, scheduleDate });
-    console.log(`[${i}] scheduled on IG + TikTok for ${scheduleDate}`);
+  const drive = await uploadAndShare(videoPath, 'video/mp4');
+  console.log(`[${i}] uploaded to Drive: ${drive.name}`);
+
+  // Post to each platform independently — one failing doesn't kill the other.
+  if (metaConfigured()) {
+    try {
+      const mediaId = await postReel({ videoUrl: drive.downloadUrl, caption: story.caption });
+      console.log(`[${i}] posted to Instagram Reels (media id: ${mediaId})`);
+    } catch (e) {
+      console.error(`[${i}] Instagram post failed: ${e?.message ?? e}`);
+    }
   } else {
-    console.log(`[${i}] AYRSHARE_API_KEY not set — skipping social post`);
+    console.log(`[${i}] Meta not configured — skipping Instagram`);
+  }
+
+  if (tiktokConfigured()) {
+    try {
+      const publishId = await postVideo({ videoUrl: drive.downloadUrl, caption: story.caption });
+      console.log(`[${i}] posted to TikTok (publish id: ${publishId})`);
+    } catch (e) {
+      console.error(`[${i}] TikTok post failed: ${e?.message ?? e}`);
+    }
+  } else {
+    console.log(`[${i}] TikTok not configured — skipping TikTok`);
   }
 }
 
 async function main() {
-  console.log(`VelvetVice clip pipeline — generating ${COUNT} clip(s)`);
+  console.log(`Velvet clip pipeline — generating ${COUNT} clip(s)`);
   let ok = 0;
   for (let i = 1; i <= COUNT; i++) {
     try {

@@ -1,16 +1,17 @@
 # velvetvice-video
 
-VelvetVice's social-clip engine. Once a day, end to end:
+Velvet's social-clip engine. Five times a day, end to end:
 
 1. Pick a vibe + heat + voice at random (`vibes.mjs`).
 2. Ask Grok for the full **story package** — title, subtitle, body, social caption.
-3. Narrate the body with xAI text-to-speech.
+3. Narrate the body with xAI text-to-speech (the `/v1/tts` endpoint).
 4. Render a 1080×1920 vertical clip — **book cover → page turn → narrated story page → branded CTA**.
 5. Capture a still of the cover frame as the thumbnail.
-6. (Optional) archive both to Google Drive.
-7. Upload the MP4 to Ayrshare and schedule a post on Instagram + TikTok at a staggered time.
+6. Upload the MP4 to Google Drive (publicly readable).
+7. POST a Reel to Instagram via the Meta Graph API.
+8. POST a TikTok via the Content Posting API.
 
-Five clips per day, posts spread across ~13 hours. Nothing of yours stays on.
+No SaaS middleman. No monthly bills. Just your own Meta + TikTok developer apps + Drive.
 
 ## How a clip is structured
 
@@ -22,44 +23,60 @@ Five clips per day, posts spread across ~13 hours. Nothing of yours stays on.
                                 VELVET — Download today"
 ```
 
-All visuals stay on-brand with the iOS app's dark/gold reader aesthetic.
+## Setup (one-off)
+
+### 1. Google Drive (video hosting)
+
+1. Google Cloud Console → new project → enable **Drive API**.
+2. **IAM & Admin → Service Accounts → Create** → finish, then create a JSON key. That JSON is `GOOGLE_SERVICE_ACCOUNT`.
+3. Create a Drive folder, share with the service account's email (Editor). The folder id from its URL is `DRIVE_FOLDER_ID`.
+
+### 2. Instagram (Meta Graph API)
+
+Prereqs: your IG account must be **Business** or **Creator** and linked to a **Facebook Page**.
+
+1. https://developers.facebook.com → **Create App** (Business) → name "Velvet". Add **Instagram Graph API**.
+2. https://business.facebook.com/settings → **System Users → Add** → name "velvet-poster". Assign your FB Page + the app to it.
+3. Generate a token: scopes `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement`, `business_management`. Set expiration to **Never**. That's `META_ACCESS_TOKEN`.
+4. Graph API Explorer → query `me/accounts?fields=instagram_business_account` → copy the `instagram_business_account.id`. That's `META_IG_BUSINESS_ID`.
+
+### 3. TikTok (Content Posting API)
+
+1. https://developers.tiktok.com → **Manage apps → Create new app** → name "Velvet". Add **Content Posting API** with scopes `video.publish`, `video.upload`.
+2. Note the **Client Key** + **Client Secret** in app settings.
+3. Run TikTok's OAuth flow against your own account to get a `refresh_token`. (You can do this manually via their authorization URL; the redirect will include the refresh token in the response.)
+4. Three values: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REFRESH_TOKEN`.
+
+### 4. Repository secrets
+
+In GitHub → Settings → Secrets and variables → Actions:
+
+| Secret                    | Source                                               |
+| ------------------------- | ---------------------------------------------------- |
+| `GROK_API_KEY`            | xAI                                                  |
+| `GOOGLE_SERVICE_ACCOUNT`  | the Drive service-account JSON                       |
+| `DRIVE_FOLDER_ID`         | the Drive folder id                                  |
+| `META_ACCESS_TOKEN`       | System User token (never-expiring)                   |
+| `META_IG_BUSINESS_ID`     | IG Business account id                               |
+| `TIKTOK_CLIENT_KEY`       | TikTok app client key                                |
+| `TIKTOK_CLIENT_SECRET`    | TikTok app client secret                             |
+| `TIKTOK_REFRESH_TOKEN`    | TikTok refresh token                                 |
+
+## Schedule
+
+`.github/workflows/clips.yml` fires at **08, 12, 16, 20, 23 UTC** every day — one clip per run, posted immediately to both platforms. Five clips daily, spaced across prime social hours.
+
+Trigger any time from the Actions tab ("Run workflow").
 
 ## Pipeline output
 
 Each successful clip produces:
 
-- `output/velvetvice-{stamp}-{i}.mp4` — the vertical video
-- `output/velvetvice-{stamp}-{i}.png` — cover-frame thumbnail
-- `output/velvetvice-{stamp}-{i}.txt` — full story package (title, body, caption)
+- `output/velvet-{stamp}-{i}.mp4` — the vertical video
+- `output/velvet-{stamp}-{i}.png` — cover-frame thumbnail
+- `output/velvet-{stamp}-{i}.txt` — full story package (title, body, caption)
 
-If `AYRSHARE_API_KEY` is set, the MP4 also uploads to Ayrshare and a post is scheduled on Instagram + TikTok with the booktok caption.
-
-If `GOOGLE_SERVICE_ACCOUNT` + `DRIVE_FOLDER_ID` are set, video + thumbnail are also archived to Drive (non-fatal — failures don't break the pipeline).
-
-## Setup
-
-### 1. Ayrshare (one-off)
-
-1. Sign up at https://app.ayrshare.com.
-2. Link your Instagram and TikTok accounts in the dashboard (one OAuth click each).
-3. Copy your API Key — that's `AYRSHARE_API_KEY`.
-
-That's the entire UI portion. Everything else is code.
-
-### 2. Repository secrets (Settings → Secrets and variables → Actions)
-
-| Secret                   | Required | What it is                                           |
-| ------------------------ | -------- | ---------------------------------------------------- |
-| `GROK_API_KEY`           | ✓        | xAI key — same one the app's edge functions use      |
-| `AYRSHARE_API_KEY`       | ✓        | Ayrshare API key                                     |
-| `GOOGLE_SERVICE_ACCOUNT` | optional | Drive backup — full service-account JSON, one line   |
-| `DRIVE_FOLDER_ID`        | optional | Drive folder id for the archive                      |
-
-### 3. Schedule
-
-`.github/workflows/clips.yml` fires once a day at **07:00 UTC**, generates 5 clips, and schedules them on Ayrshare at +1h, +4h, +7h, +10h, +13h — i.e. roughly 08, 11, 14, 17, 20 UTC. Tune cadence with `POST_START_HOURS` and `POST_INTERVAL_HOURS` (set as env in the workflow if you want non-defaults).
-
-Trigger a run any time from the Actions tab ("Run workflow").
+The MP4 is also uploaded to Drive (publicly readable) — Meta and TikTok fetch it from there.
 
 ## Run locally
 
@@ -69,24 +86,15 @@ cp .env.example .env   # fill in the values
 node --env-file=.env pipeline.mjs
 ```
 
-Without `AYRSHARE_API_KEY`, the pipeline still generates and renders — it just skips the upload + schedule step. Useful for previewing the visual output.
+Each missing config is non-fatal — the pipeline runs as far as it can with what's set. Useful for testing the visuals without touching social platforms (skip the Meta/TikTok secrets, leave Drive set).
 
 ## Manual single clip
 
-For a one-off, hand-picked post — pair with the admin studio in `velvetvice-web` (`/admin`) to draft a hook and narration.
+Drop a body in `input/script.txt` (or full package in `input/story.json`) + narration audio in `input/`, then:
 
 ```bash
-# Either drop a full package
-echo '{ "title": "Borrowed Heat", "subtitle": "One contract. One bed.", "body": "..." }' > input/story.json
-
-# …or just the body
-echo "She steps onto the porch and the air bends..." > input/script.txt
-
-# Plus the narration audio
-cp ~/audio.mp3 input/
-
 npm run render
-# → output/velvetvice-{stamp}.mp4 + .png
+# → output/velvet-{stamp}.mp4 + .png
 ```
 
 ## Tweaking the design
@@ -95,21 +103,22 @@ npm run render
 npm run studio
 ```
 
-Opens Remotion Studio to live-edit `src/ClipVideo.tsx` (cover layout, turn timing, page typography, CTA copy).
+Opens Remotion Studio to live-edit `src/ClipVideo.tsx`.
 
 ## Layout
 
-| File                                | Role                                                       |
-| ----------------------------------- | ---------------------------------------------------------- |
-| `src/ClipVideo.tsx`                 | The composition — cover, turn, page, CTA                   |
-| `src/Root.tsx`                      | Registers the `Clip` composition + total duration          |
-| `lib/render.mjs`                    | Bundle + render video + render cover-still thumbnail       |
-| `lib/xai.mjs`                       | Grok story package + xAI narration                         |
-| `lib/ayrshare.mjs`                  | Upload media to Ayrshare + schedule IG/TT posts            |
-| `lib/drive.mjs`                     | Optional Drive archive (video + thumbnail)                 |
-| `vibes.mjs`                         | Content pool: vibes (with heat) and voices                 |
-| `pipeline.mjs`                      | The full automated chain (per clip: generate → schedule)   |
-| `render.mjs`                        | Manual single-clip render from `input/`                    |
-| `.github/workflows/clips.yml`       | The 1x/day schedule (5 clips, staggered)                   |
+| File                                | Role                                                  |
+| ----------------------------------- | ----------------------------------------------------- |
+| `src/ClipVideo.tsx`                 | The composition — cover, turn, page, CTA              |
+| `src/Root.tsx`                      | Registers the `Clip` composition                      |
+| `lib/render.mjs`                    | Bundle + render video + still thumbnail               |
+| `lib/xai.mjs`                       | Grok story package + xAI narration                    |
+| `lib/drive.mjs`                     | Upload to Drive, set public, return direct-stream URL |
+| `lib/meta.mjs`                      | Instagram Reels publishing via Graph API              |
+| `lib/tiktok.mjs`                    | TikTok video publishing via Content Posting API       |
+| `vibes.mjs`                         | Content pool: vibes (with heat) and voices            |
+| `pipeline.mjs`                      | Per clip: generate → render → upload → post           |
+| `render.mjs`                        | Manual single-clip render from `input/`               |
+| `.github/workflows/clips.yml`       | The 5x/day schedule                                   |
 
 The first render on any machine downloads a headless Chromium automatically.

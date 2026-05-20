@@ -1,21 +1,25 @@
-name: Daily VelvetVice clips
+name: Daily Velvet clips
 
 on:
   schedule:
-    # Once a day — generates 5 clips and schedules them across the day on Ayrshare.
-    # Adjust posting cadence with POST_START_HOURS / POST_INTERVAL_HOURS.
-    - cron: '0 7 * * *'
+    # Five runs a day spaced across EU/US prime social hours (UTC).
+    # GitHub Actions schedules are best-effort — actual fire time can drift.
+    - cron: '0 8 * * *'
+    - cron: '0 12 * * *'
+    - cron: '0 16 * * *'
+    - cron: '0 20 * * *'
+    - cron: '0 23 * * *'
   workflow_dispatch:
     inputs:
       count:
         description: How many clips to generate
         required: false
-        default: '5'
+        default: '1'
 
 jobs:
   clip:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -26,16 +30,20 @@ jobs:
 
       - run: npm ci
 
-      - name: Generate, render, and schedule clips
+      - name: Generate, render, and post clip
         env:
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
-          AYRSHARE_API_KEY: ${{ secrets.AYRSHARE_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          CLIP_COUNT: ${{ inputs.count || '5' }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_IG_BUSINESS_ID: ${{ secrets.META_IG_BUSINESS_ID }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          CLIP_COUNT: ${{ inputs.count || '1' }}
         run: npm run pipeline
 
-      - name: Upload artifacts (fallback if Ayrshare upload fails)
+      - name: Upload artifacts (fallback)
         if: always()
         uses: actions/upload-artifact@v4
         with:
