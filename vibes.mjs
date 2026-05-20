@@ -24,7 +24,8 @@ export const VIBES = [
   { vibe: 'roommates, the unspoken rule, the night it finally breaks', heat: 'Steamy' },
 ];
 
-export const VOICES = ['aurora', 'lyra', 'iris', 'vale', 'rhett', 'noir'];
+// xAI /v1/tts voice IDs — match the iOS app's Siren-tier narration voices.
+export const VOICES = ['eve', 'ara', 'rex', 'sal', 'leo'];
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
