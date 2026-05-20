@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { generateStory, generateAudio } from './lib/xai.mjs';
 import { renderClip } from './lib/render.mjs';
-import { uploadAndShare, driveConfigured } from './lib/drive.mjs';
+import { uploadFile, driveConfigured } from './lib/drive.mjs';
 import { postReel, metaConfigured } from './lib/meta.mjs';
 import { postVideo, tiktokConfigured } from './lib/tiktok.mjs';
 import { pickVibe, pickVoice } from './vibes.mjs';
@@ -11,13 +11,16 @@ import { pickVibe, pickVoice } from './vibes.mjs';
  * The hands-off pipeline: invent a vibe + voice, ask Grok for the full story
  * package (title, subtitle, body, social caption), narrate it, render a
  * vertical clip (book cover → page turn → narrated page → branded CTA),
- * capture a cover-still thumbnail, upload the video to Drive (publicly
- * readable), then post to Instagram Reels and TikTok via their native APIs
- * using the Drive URL.
+ * capture a cover-still thumbnail, upload everything to Drive, then post to
+ * Instagram Reels and TikTok if their creds are set.
  *
- * Designed to run 5x/day via .github/workflows/clips.yml — one clip per run,
- * posted immediately. A failed clip is logged and skipped; one platform
- * failing doesn't take down the other.
+ * Drive-only mode: if META and TIKTOK aren't configured, clips still upload
+ * to Drive (private). Open Drive on your phone, scrub through, manually post.
+ * Useful for hand-curated review while the API access is being set up.
+ *
+ * Designed to run 5x/day via .github/workflows/clips.yml — one clip per run.
+ * A failed clip is logged and skipped; one platform failing doesn't take
+ * down the other.
  */
 
 const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
@@ -54,41 +57,67 @@ async function makeClip(i) {
     `\n[${i}] rendered ${path.basename(videoPath)} (${seconds.toFixed(1)}s) + ${path.basename(thumbnailPath)}`,
   );
 
-  // Sidecar text with the full package — handy for manual posting and audit.
+  // Caption sidecar — designed for fast mobile read: caption at the top so
+  // you can copy and paste straight into IG / TikTok without scrolling.
+  const txtPath = videoPath.replace(/\.mp4$/, '.txt');
   writeFileSync(
-    videoPath.replace(/\.mp4$/, '.txt'),
-    `Title: ${story.title}\nSubtitle: ${story.subtitle}\nVibe: ${vibe}\nHeat: ${heat}\nVoice: ${voice}\n\n--- Body ---\n${story.body}\n\n--- Caption ---\n${story.caption}\n`,
+    txtPath,
+    [
+      '=== CAPTION (copy this) ===',
+      '',
+      story.caption,
+      '',
+      '=== TITLE ===',
+      story.title,
+      story.subtitle,
+      '',
+      '=== STORY BODY (narration) ===',
+      story.body,
+      '',
+      '=== METADATA ===',
+      `Vibe:   ${vibe}`,
+      `Heat:   ${heat}`,
+      `Voice:  ${voice}`,
+      `Length: ${seconds.toFixed(1)}s`,
+      '',
+    ].join('\n'),
   );
 
   if (!driveConfigured()) {
-    console.log(`[${i}] Drive not configured — can't host the video, skipping social posts`);
+    console.log(`[${i}] Drive not configured — files left in output/`);
     return;
   }
 
-  const drive = await uploadAndShare(videoPath, 'video/mp4');
-  console.log(`[${i}] uploaded to Drive: ${drive.name}`);
+  // Video needs to be publicly readable if a platform will fetch by URL.
+  // Otherwise keep everything private — you'll be the one opening it from
+  // the Drive app on your phone.
+  const needsPublicVideo = metaConfigured() || tiktokConfigured();
+  const video = await uploadFile(videoPath, 'video/mp4', { share: needsPublicVideo });
+  await uploadFile(thumbnailPath, 'image/png');
+  await uploadFile(txtPath, 'text/plain');
+  console.log(`[${i}] uploaded to Drive: ${video.name} (+ thumbnail + caption)`);
 
-  // Post to each platform independently — one failing doesn't kill the other.
+  if (!needsPublicVideo) {
+    console.log(`[${i}] no social destinations configured — clip in Drive for manual posting`);
+    return;
+  }
+
   if (metaConfigured()) {
     try {
-      const mediaId = await postReel({ videoUrl: drive.downloadUrl, caption: story.caption });
+      const mediaId = await postReel({ videoUrl: video.downloadUrl, caption: story.caption });
       console.log(`[${i}] posted to Instagram Reels (media id: ${mediaId})`);
     } catch (e) {
       console.error(`[${i}] Instagram post failed: ${e?.message ?? e}`);
     }
-  } else {
-    console.log(`[${i}] Meta not configured — skipping Instagram`);
   }
 
   if (tiktokConfigured()) {
     try {
-      const publishId = await postVideo({ videoUrl: drive.downloadUrl, caption: story.caption });
+      const publishId = await postVideo({ videoUrl: video.downloadUrl, caption: story.caption });
       console.log(`[${i}] posted to TikTok (publish id: ${publishId})`);
     } catch (e) {
       console.error(`[${i}] TikTok post failed: ${e?.message ?? e}`);
     }
-  } else {
-    console.log(`[${i}] TikTok not configured — skipping TikTok`);
   }
 }
 
