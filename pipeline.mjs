@@ -1,4 +1,5 @@
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { generateStory, generateAudio } from './lib/xai.mjs';
 import { renderClip } from './lib/render.mjs';
@@ -24,6 +25,9 @@ import { pickVibe, pickVoice } from './vibes.mjs';
  */
 
 const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
+// Narration playback rate. Lower = slower + more deliberate. Pitch is
+// preserved by ffmpeg's atempo filter. Safe range 0.5–2.0; 1 = no change.
+const TTS_RATE = Number(process.env.TTS_RATE ?? 0.7);
 
 async function makeClip(i) {
   const { vibe, heat } = pickVibe();
@@ -43,6 +47,17 @@ async function makeClip(i) {
   const label = `velvet-${stamp}-${i}`;
   const audioPath = path.join(tmpDir, `${label}.mp3`);
   writeFileSync(audioPath, audio);
+
+  if (TTS_RATE !== 1) {
+    const slowPath = `${audioPath}.slow.mp3`;
+    execFileSync(
+      'ffmpeg',
+      ['-y', '-loglevel', 'error', '-i', audioPath, '-filter:a', `atempo=${TTS_RATE}`, '-vn', slowPath],
+      { stdio: 'inherit' },
+    );
+    renameSync(slowPath, audioPath);
+    console.log(`[${i}] narration slowed to ${TTS_RATE}x`);
+  }
 
   const { videoPath, thumbnailPath, seconds } = await renderClip({
     title: story.title,
