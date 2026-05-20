@@ -2,24 +2,20 @@ name: Daily VelvetVice clips
 
 on:
   schedule:
-    # Five runs a day spaced across EU/US prime social hours (UTC).
-    # GitHub Actions schedules are best-effort — actual fire time can drift by a few minutes.
-    - cron: '0 8 * * *'
-    - cron: '0 12 * * *'
-    - cron: '0 16 * * *'
-    - cron: '0 20 * * *'
-    - cron: '0 23 * * *'
+    # Once a day — generates 5 clips and schedules them across the day on Ayrshare.
+    # Adjust posting cadence with POST_START_HOURS / POST_INTERVAL_HOURS.
+    - cron: '0 7 * * *'
   workflow_dispatch:
     inputs:
       count:
         description: How many clips to generate
         required: false
-        default: '1'
+        default: '5'
 
 jobs:
   clip:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -30,16 +26,16 @@ jobs:
 
       - run: npm ci
 
-      - name: Generate, render, and post clip
+      - name: Generate, render, and schedule clips
         env:
           GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+          AYRSHARE_API_KEY: ${{ secrets.AYRSHARE_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-          MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
-          CLIP_COUNT: ${{ inputs.count || '1' }}
+          CLIP_COUNT: ${{ inputs.count || '5' }}
         run: npm run pipeline
 
-      - name: Upload artifacts (fallback if Drive isn't set)
+      - name: Upload artifacts (fallback if Ayrshare upload fails)
         if: always()
         uses: actions/upload-artifact@v4
         with:

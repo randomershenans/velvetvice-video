@@ -3,21 +3,31 @@ import path from 'node:path';
 import { generateStory, generateAudio } from './lib/xai.mjs';
 import { renderClip } from './lib/render.mjs';
 import { uploadToDrive, driveConfigured } from './lib/drive.mjs';
-import { postToMake, makeConfigured } from './lib/make.mjs';
+import { uploadMedia, schedulePost, ayrshareConfigured } from './lib/ayrshare.mjs';
 import { pickVibe, pickVoice } from './vibes.mjs';
 
 /**
- * The hands-off pipeline: invent a vibe + voice, ask Grok for the full
- * story package (title, subtitle, body, social caption), narrate it, render
- * a vertical clip (book cover → page turn → narrated page → branded CTA),
- * capture a still of the cover as the thumbnail, upload both to Drive, then
- * POST a payload to the Make.com webhook that posts to Instagram + TikTok.
+ * The hands-off pipeline: per clip, invent a vibe + voice, ask Grok for the
+ * full story package (title, subtitle, body, social caption), narrate it,
+ * render a vertical clip (book cover → page turn → narrated page →
+ * branded CTA), capture a cover-still thumbnail, archive to Drive
+ * (optional), upload the video to Ayrshare's media bucket, and schedule a
+ * post on Instagram + TikTok at a staggered time.
  *
- * Designed to run on a schedule (.github/workflows/clips.yml). A failed clip
- * is logged and skipped so the rest of the batch still ships.
+ * Designed to run once a day via .github/workflows/clips.yml — five clips
+ * per run, posts staggered through the day. A failed clip is logged and
+ * skipped so the rest of the batch still ships.
  */
 
-const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
+const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 5));
+const POST_START_HOURS = Number(process.env.POST_START_HOURS ?? 1);
+const POST_INTERVAL_HOURS = Number(process.env.POST_INTERVAL_HOURS ?? 3);
+
+/** ISO timestamp for the i-th clip's post (1-indexed). Spaced from now. */
+function scheduleTimeFor(i) {
+  const offsetMs = (POST_START_HOURS + (i - 1) * POST_INTERVAL_HOURS) * 60 * 60 * 1000;
+  return new Date(Date.now() + offsetMs).toISOString();
+}
 
 async function makeClip(i) {
   const { vibe, heat } = pickVibe();
@@ -57,35 +67,24 @@ async function makeClip(i) {
     `Title: ${story.title}\nSubtitle: ${story.subtitle}\nVibe: ${vibe}\nHeat: ${heat}\nVoice: ${voice}\n\n--- Body ---\n${story.body}\n\n--- Caption ---\n${story.caption}\n`,
   );
 
-  let videoDrive = null;
-  let thumbDrive = null;
+  // Optional Drive archive — non-fatal if it fails.
   if (driveConfigured()) {
-    videoDrive = await uploadToDrive(videoPath, 'video/mp4');
-    thumbDrive = await uploadToDrive(thumbnailPath, 'image/png');
-    console.log(`[${i}] uploaded to Drive: ${videoDrive.name}`);
-  } else {
-    console.log(`[${i}] Drive not configured — files left in output/`);
+    try {
+      await uploadToDrive(videoPath, 'video/mp4');
+      await uploadToDrive(thumbnailPath, 'image/png');
+      console.log(`[${i}] archived to Drive`);
+    } catch (e) {
+      console.warn(`[${i}] Drive archive failed (non-fatal): ${e?.message ?? e}`);
+    }
   }
 
-  if (makeConfigured()) {
-    await postToMake({
-      title: story.title,
-      subtitle: story.subtitle,
-      caption: story.caption,
-      vibe,
-      heat,
-      voice,
-      videoFileId: videoDrive?.id ?? null,
-      videoFileName: videoDrive?.name ?? path.basename(videoPath),
-      videoWebLink: videoDrive?.webViewLink ?? null,
-      thumbnailFileId: thumbDrive?.id ?? null,
-      thumbnailFileName: thumbDrive?.name ?? path.basename(thumbnailPath),
-      thumbnailWebLink: thumbDrive?.webViewLink ?? null,
-      createdAt: new Date().toISOString(),
-    });
-    console.log(`[${i}] posted to Make.com webhook`);
+  if (ayrshareConfigured()) {
+    const mediaUrl = await uploadMedia(videoPath);
+    const scheduleDate = scheduleTimeFor(i);
+    await schedulePost({ caption: story.caption, videoUrl: mediaUrl, scheduleDate });
+    console.log(`[${i}] scheduled on IG + TikTok for ${scheduleDate}`);
   } else {
-    console.log(`[${i}] MAKE_WEBHOOK_URL not set — skipping social post`);
+    console.log(`[${i}] AYRSHARE_API_KEY not set — skipping social post`);
   }
 }
 
