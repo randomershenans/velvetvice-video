@@ -16,7 +16,7 @@ async function main() {
   const root = process.cwd();
   const inputDir = path.join(root, 'input');
 
-  let title = 'Velvet Vice';
+  let title = 'Velvet';
   let subtitle = '';
   let body = '';
 

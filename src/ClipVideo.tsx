@@ -135,7 +135,7 @@ const BookCover: React.FC<{ title: string; subtitle: string }> = ({ title, subti
             color: GOLD_DIM,
           }}
         >
-          VELVET VICE
+          VELVET
         </div>
         <div style={{ width: 90, height: 1, background: 'rgba(212,175,122,0.4)' }} />
 
@@ -150,7 +150,7 @@ const BookCover: React.FC<{ title: string; subtitle: string }> = ({ title, subti
             letterSpacing: 0.5,
           }}
         >
-          {title || 'Velvet Vice'}
+          {title || 'Velvet'}
         </div>
 
         {subtitle ? (
@@ -230,7 +230,7 @@ const BookPage: React.FC<{ body: string; narrationFrames: number }> = ({ body, n
           color: 'rgba(212,175,122,0.55)',
         }}
       >
-        VELVET VICE
+        VELVET
       </div>
 
       <div
@@ -334,7 +334,7 @@ const CTAFade: React.FC = () => {
           color: PARCHMENT,
         }}
       >
-        VELVET VICE
+        VELVET
       </div>
       <div
         style={{

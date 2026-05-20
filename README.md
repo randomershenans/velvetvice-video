@@ -19,7 +19,7 @@ Five clips per day, posts spread across ~13 hours. Nothing of yours stays on.
 [ 2.5 – 3.3s ] Page turn     — the cover hinges up and away
 [ 3.3 – ~50s ] Narrated page — TTS plays, story text scrolls, cliffhanger
 [ last 3s    ] CTA           — "Steer the story whichever way you want.
-                                VELVET VICE — Download today"
+                                VELVET — Download today"
 ```
 
 All visuals stay on-brand with the iOS app's dark/gold reader aesthetic.
