@@ -24,8 +24,17 @@ export const VIBES = [
   { vibe: 'roommates, the unspoken rule, the night it finally breaks', heat: 'Steamy' },
 ];
 
-// xAI /v1/tts voice IDs — match the iOS app's Siren-tier narration voices.
-export const VOICES = ['eve', 'ara', 'rex', 'sal', 'leo'];
+// xAI /v1/tts voice IDs paired with the narrator gender they fit. The
+// pipeline passes the gender to Grok so the first-person POV always
+// matches the voice. Adjust an entry if a voice turns out to read in a
+// different register than expected.
+export const VOICES = [
+  { id: 'eve', gender: 'female' },
+  { id: 'ara', gender: 'female' },
+  { id: 'sal', gender: 'male' },
+  { id: 'rex', gender: 'male' },
+  { id: 'leo', gender: 'male' },
+];
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 

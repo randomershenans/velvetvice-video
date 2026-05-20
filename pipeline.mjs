@@ -28,12 +28,12 @@ const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
 async function makeClip(i) {
   const { vibe, heat } = pickVibe();
   const voice = pickVoice();
-  console.log(`\n[${i}/${COUNT}] ${heat} · ${voice} · ${vibe}`);
+  console.log(`\n[${i}/${COUNT}] ${heat} · ${voice.id} (${voice.gender}) · ${vibe}`);
 
-  const story = await generateStory({ vibe, heat });
+  const story = await generateStory({ vibe, heat, narrator: voice.gender });
   console.log(`[${i}] "${story.title}" — ${story.body.split(/\s+/).length} words`);
 
-  const audio = await generateAudio(story.body, voice);
+  const audio = await generateAudio(story.body, voice.id);
 
   const root = process.cwd();
   const tmpDir = path.join(root, 'tmp');
