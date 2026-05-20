@@ -1,12 +1,17 @@
 import { Composition } from 'remotion';
-import { ClipVideo, type ClipProps } from './ClipVideo';
+import {
+  ClipVideo,
+  type ClipProps,
+  COVER_FRAMES,
+  TURN_FRAMES,
+  CTA_TAIL,
+} from './ClipVideo';
 
 export const FPS = 30;
-export const END_CARD_FRAMES = 108; // 3.6s
 
 /**
- * One composition, "Clip". Total duration is derived from the narration
- * length passed in by render.mjs, plus a fixed end-card tail.
+ * One composition, "Clip". Total duration is computed from the narration
+ * length plus the fixed cover/turn/CTA tails (see ClipVideo.tsx).
  */
 export const Root: React.FC = () => {
   return (
@@ -19,14 +24,17 @@ export const Root: React.FC = () => {
       durationInFrames={1500}
       defaultProps={
         {
-          script:
+          title: 'The Lighthouse Keeper',
+          subtitle: 'Six years late, the mist remembered everything.',
+          body:
             'They meet again in the rain, six years late. I trudge along the coastal path, and there he is, emerging from the mist like a memory I tried to bind shut. He has not forgotten either. I can see it in the way he stops.',
           audioFile: 'audio.mp3',
           narrationFrames: 1500,
         } satisfies ClipProps
       }
       calculateMetadata={({ props }) => ({
-        durationInFrames: (props as ClipProps).narrationFrames + END_CARD_FRAMES,
+        durationInFrames:
+          COVER_FRAMES + TURN_FRAMES + (props as ClipProps).narrationFrames + CTA_TAIL,
       })}
     />
   );

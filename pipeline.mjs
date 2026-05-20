@@ -1,28 +1,33 @@
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { generateScript, generateAudio } from './lib/xai.mjs';
+import { generateStory, generateAudio } from './lib/xai.mjs';
 import { renderClip } from './lib/render.mjs';
 import { uploadToDrive, driveConfigured } from './lib/drive.mjs';
+import { postToMake, makeConfigured } from './lib/make.mjs';
 import { pickVibe, pickVoice } from './vibes.mjs';
 
 /**
- * The hands-off pipeline: for each clip, invent a vibe, write a hook with
- * Grok, narrate it with xAI, render the video, and upload it to Drive.
- * Designed to run on a schedule (see .github/workflows/clips.yml) — one
- * failed clip is logged and skipped so the rest of the batch still ships.
+ * The hands-off pipeline: invent a vibe + voice, ask Grok for the full
+ * story package (title, subtitle, body, social caption), narrate it, render
+ * a vertical clip (book cover → page turn → narrated page → branded CTA),
+ * capture a still of the cover as the thumbnail, upload both to Drive, then
+ * POST a payload to the Make.com webhook that posts to Instagram + TikTok.
+ *
+ * Designed to run on a schedule (.github/workflows/clips.yml). A failed clip
+ * is logged and skipped so the rest of the batch still ships.
  */
 
-const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 3));
+const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
 
 async function makeClip(i) {
   const { vibe, heat } = pickVibe();
   const voice = pickVoice();
   console.log(`\n[${i}/${COUNT}] ${heat} · ${voice} · ${vibe}`);
 
-  const script = await generateScript({ vibe, heat });
-  console.log(`[${i}] script: ${script.split(/\s+/).length} words`);
+  const story = await generateStory({ vibe, heat });
+  console.log(`[${i}] "${story.title}" — ${story.body.split(/\s+/).length} words`);
 
-  const audio = await generateAudio(script, voice);
+  const audio = await generateAudio(story.body, voice);
 
   const root = process.cwd();
   const tmpDir = path.join(root, 'tmp');
@@ -33,23 +38,54 @@ async function makeClip(i) {
   const audioPath = path.join(tmpDir, `${label}.mp3`);
   writeFileSync(audioPath, audio);
 
-  const { outPath } = await renderClip({
-    script,
+  const { videoPath, thumbnailPath, seconds } = await renderClip({
+    title: story.title,
+    subtitle: story.subtitle,
+    body: story.body,
     audioPath,
     outDir: path.join(root, 'output'),
     label,
     onProgress: (p) => process.stdout.write(`\r[${i}] rendering ${Math.round(p * 100)}%`),
   });
-  console.log(`\n[${i}] rendered ${path.basename(outPath)}`);
+  console.log(
+    `\n[${i}] rendered ${path.basename(videoPath)} (${seconds.toFixed(1)}s) + ${path.basename(thumbnailPath)}`,
+  );
 
-  // Save the script alongside for caption/reference use.
-  writeFileSync(outPath.replace(/\.mp4$/, '.txt'), script);
+  // Sidecar text with the full package — handy for manual posting and audit.
+  writeFileSync(
+    videoPath.replace(/\.mp4$/, '.txt'),
+    `Title: ${story.title}\nSubtitle: ${story.subtitle}\nVibe: ${vibe}\nHeat: ${heat}\nVoice: ${voice}\n\n--- Body ---\n${story.body}\n\n--- Caption ---\n${story.caption}\n`,
+  );
 
+  let videoDrive = null;
+  let thumbDrive = null;
   if (driveConfigured()) {
-    const up = await uploadToDrive(outPath);
-    console.log(`[${i}] uploaded to Drive: ${up.name}`);
+    videoDrive = await uploadToDrive(videoPath, 'video/mp4');
+    thumbDrive = await uploadToDrive(thumbnailPath, 'image/png');
+    console.log(`[${i}] uploaded to Drive: ${videoDrive.name}`);
   } else {
-    console.log(`[${i}] Drive not configured — clip left in output/`);
+    console.log(`[${i}] Drive not configured — files left in output/`);
+  }
+
+  if (makeConfigured()) {
+    await postToMake({
+      title: story.title,
+      subtitle: story.subtitle,
+      caption: story.caption,
+      vibe,
+      heat,
+      voice,
+      videoFileId: videoDrive?.id ?? null,
+      videoFileName: videoDrive?.name ?? path.basename(videoPath),
+      videoWebLink: videoDrive?.webViewLink ?? null,
+      thumbnailFileId: thumbDrive?.id ?? null,
+      thumbnailFileName: thumbDrive?.name ?? path.basename(thumbnailPath),
+      thumbnailWebLink: thumbDrive?.webViewLink ?? null,
+      createdAt: new Date().toISOString(),
+    });
+    console.log(`[${i}] posted to Make.com webhook`);
+  } else {
+    console.log(`[${i}] MAKE_WEBHOOK_URL not set — skipping social post`);
   }
 }
 

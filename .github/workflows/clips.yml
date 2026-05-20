@@ -1,0 +1,52 @@
+name: Daily VelvetVice clips
+
+on:
+  schedule:
+    # Five runs a day spaced across EU/US prime social hours (UTC).
+    # GitHub Actions schedules are best-effort — actual fire time can drift by a few minutes.
+    - cron: '0 8 * * *'
+    - cron: '0 12 * * *'
+    - cron: '0 16 * * *'
+    - cron: '0 20 * * *'
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+    inputs:
+      count:
+        description: How many clips to generate
+        required: false
+        default: '1'
+
+jobs:
+  clip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate, render, and post clip
+        env:
+          GROK_API_KEY: ${{ secrets.GROK_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+          MAKE_WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
+          CLIP_COUNT: ${{ inputs.count || '1' }}
+        run: npm run pipeline
+
+      - name: Upload artifacts (fallback if Drive isn't set)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clips-${{ github.run_id }}
+          path: |
+            output/*.mp4
+            output/*.png
+            output/*.txt
+          retention-days: 7
+          if-no-files-found: ignore
