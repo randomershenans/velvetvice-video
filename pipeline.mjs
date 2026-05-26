@@ -28,13 +28,19 @@ const COUNT = Math.max(1, Number(process.env.CLIP_COUNT ?? 1));
 // Narration playback rate. Lower = slower + more deliberate. Pitch is
 // preserved by ffmpeg's atempo filter. Safe range 0.5–2.0; 1 = no change.
 const TTS_RATE = Number(process.env.TTS_RATE ?? 0.7);
+// Sauciness dial. Sets how far the physical charge goes — but stays
+// platform-safe (suggestive, never explicit) at every level so the clips
+// don't get the accounts banned. One of: sweet, warm, steamy, scorching.
+const VALID_HEATS = ['sweet', 'warm', 'steamy', 'scorching'];
+const heatInput = (process.env.HEAT || 'steamy').trim().toLowerCase();
+const HEAT = VALID_HEATS.includes(heatInput) ? heatInput : 'steamy';
 
 async function makeClip(i) {
-  const { vibe, heat } = pickVibe();
+  const { vibe } = pickVibe();
   const voice = pickVoice();
-  console.log(`\n[${i}/${COUNT}] ${heat} · ${voice.id} (${voice.gender}) · ${vibe}`);
+  console.log(`\n[${i}/${COUNT}] ${HEAT} · ${voice.id} (${voice.gender}) · ${vibe}`);
 
-  const story = await generateStory({ vibe, heat, narrator: voice.gender });
+  const story = await generateStory({ vibe, heat: HEAT, narrator: voice.gender });
   console.log(`[${i}] "${story.title}" — ${story.body.split(/\s+/).length} words`);
 
   const audio = await generateAudio(story.body, voice.id);
@@ -91,7 +97,7 @@ async function makeClip(i) {
       '',
       '=== METADATA ===',
       `Vibe:   ${vibe}`,
-      `Heat:   ${heat}`,
+      `Heat:   ${HEAT}`,
       `Voice:  ${voice.id} (${voice.gender})`,
       `Length: ${seconds.toFixed(1)}s`,
       '',

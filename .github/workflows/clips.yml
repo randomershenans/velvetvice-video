@@ -48,6 +48,7 @@ jobs:
           TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           CLIP_COUNT: ${{ inputs.count || '1' }}
           TTS_RATE: ${{ vars.TTS_RATE || '0.7' }}
+          HEAT: ${{ vars.HEAT || 'steamy' }}
         run: npm run pipeline
 
       - name: Upload artifacts (fallback)
